@@ -1,26 +1,38 @@
-"""
-Controller for handling user registration requests.
-"""
-
 from flask import Blueprint, request, jsonify
+from flask_mail import Mail
 from app.auth.services.register_service import RegisterService
-from app.utils.exceptions import BadRequestError
+from app.utils.errors import ValidationError, RegistrationError
 
-register_controller = Blueprint('register_controller', __name__)
+register_bp = Blueprint('register', __name__, url_prefix='/auth/register')
 
-@register_controller.route('/register', methods=['POST'])
-def register_user():
-    """Endpoint to register a new user."""
+# Instantiate necessary dependencies
+mail = Mail()
+register_service = RegisterService(mail)
+
+@register_bp.route('', methods=['POST'])
+def register():
+    """
+    Endpoint to register a new user.
+
+    :return: JSON response
+    """
     try:
         data = request.json
-        if not data:
-            raise BadRequestError("Request body is missing.")
-        
-        email = data.get("email")
-        password = data.get("password")
-        RegisterService.register(email=email, password=password)
-        return jsonify({"message": "User registered successfully. Confirmation email sent."}), 201
-    except BadRequestError as e:
-        return jsonify({"error": str(e)}), 400
+        email = data.get('email')
+        password = data.get('password')
+
+        if not email or not password:
+            return jsonify({"error": "Email and password are required."}), 400
+
+        # Call registration service
+        response = register_service.register_user(email, password)
+        return jsonify(response), 201
+
+    except ValidationError as e:
+        return jsonify({"error": e.message}), 400
+
+    except RegistrationError as e:
+        return jsonify({"error": e.message}), 409
+
     except Exception as e:
-        return jsonify({"error": "An error occurred during registration."}), 500
+        return jsonify({"error": "An unexpected error occurred."}), 500
